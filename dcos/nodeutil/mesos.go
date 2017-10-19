@@ -1,5 +1,10 @@
 package nodeutil
 
+import "errors"
+
+// ErrContainerIDNotFound is returned by ContainerID() function if the container id is not set.
+var ErrContainerIDNotFound = errors.New("invalid task. Container ID not found")
+
 // State stands for mesos state.json available via /mesos/master/state.json
 type State struct {
 	ID         string      `json:"id"`
@@ -34,6 +39,41 @@ type Task struct {
 	State       string `json:"state"`
 	Role        string `json:"role"`
 
-	Statuses []struct {
-	} `json:"statuses"`
+	Statuses []Status `json:"statuses"`
+}
+
+// Status is a field in state.json
+type Status struct {
+	ContainerStatus ContainerStatus `json:"container_status"`
+}
+
+// ContainerStatus is a field in state.json
+type ContainerStatus struct {
+	ContainerID NestedValue `json:"container_id"`
+}
+
+// NestedValue represents a nested container ID. The value is the actual container ID
+// and Parent is a reference to another NestedValue structure.
+type NestedValue struct {
+	Value  string       `json:"value"`
+	Parent *NestedValue `json:"parent"`
+}
+
+// ContainerID returns a container id for a given task.
+func (t Task) ContainerID() (containerIDs []string, err error) {
+	for _, status := range t.Statuses {
+		containerID := status.ContainerStatus.ContainerID.Value
+		if containerID == "" {
+			return nil, ErrContainerIDNotFound
+		}
+		containerIDs = append(containerIDs, containerID)
+
+		parent := status.ContainerStatus.ContainerID.Parent
+		for parent != nil {
+			containerIDs = append(containerIDs, parent.Value)
+			parent = parent.Parent
+		}
+	}
+
+	return containerIDs, nil
 }

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -24,6 +25,9 @@ const (
 	defaultClusterIDLocation = "/var/lib/dcos/cluster-id"
 	defaultBashPath          = "/bin/bash"
 )
+
+// ErrTaskNotFound is return if the canonical ID for a given task not found.
+var ErrTaskNotFound = errors.New("task not found")
 
 var defaultStateURL = url.URL{
 	Scheme: "http",
@@ -53,6 +57,15 @@ type NodeInfo interface {
 	IsLeader() (bool, error)
 	MesosID(context.Context) (string, error)
 	ClusterID() (string, error)
+	TaskCanonicalID(context.Context, string) (*CanonicalID, error)
+}
+
+// CanonicalID is a unique task id.
+type CanonicalID struct {
+	AgentID      string
+	FrameworkID  string
+	ExecutorID   string
+	ContainerIDs []string
 }
 
 // dcosInfo is implementation of NodeInfo interface.
@@ -362,6 +375,36 @@ func (d *dcosInfo) state(ctx context.Context) (state State, err error) {
 
 	err = json.Unmarshal(body, &state)
 	return state, err
+}
+
+// TaskCanonicalID return a CanonicalID for a given task.
+func (d *dcosInfo) TaskCanonicalID(ctx context.Context, task string) (*CanonicalID, error) {
+	state, err := d.state(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, framework := range state.Frameworks {
+		for _, t := range framework.Tasks {
+			if t.Name != task && !strings.Contains(t.ID, task) {
+				continue
+			}
+
+			containerIDs, err := t.ContainerID()
+			if err != nil {
+				return nil, err
+			}
+
+			return &CanonicalID{
+				AgentID:      t.SlaveID,
+				FrameworkID:  t.FrameworkID,
+				ExecutorID:   t.ID,
+				ContainerIDs: containerIDs,
+			}, nil
+		}
+	}
+
+	return nil, ErrTaskNotFound
 }
 
 // HeaderFromContext returns http.Header from a context if it's found.
