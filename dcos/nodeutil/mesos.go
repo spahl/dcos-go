@@ -75,5 +75,8 @@ func (t Task) ContainerID() (containerIDs []string, err error) {
 		}
 	}
 
+	if len(containerIDs) == 0 {
+		return nil, ErrContainerIDNotFound
+	}
 	return containerIDs, nil
 }

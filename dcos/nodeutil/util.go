@@ -395,10 +395,14 @@ func (d *dcosInfo) TaskCanonicalID(ctx context.Context, task string) (*Canonical
 				return nil, err
 			}
 
+			executorID := t.ExecutorID
+			if executorID == "" {
+				executorID = t.ID
+			}
 			return &CanonicalID{
 				AgentID:      t.SlaveID,
 				FrameworkID:  t.FrameworkID,
-				ExecutorID:   t.ID,
+				ExecutorID:   executorID,
 				ContainerIDs: containerIDs,
 			}, nil
 		}
